@@ -176,6 +176,8 @@
         }
 
         // Handle the OAuth response
+        console.log('OAuth callback page loaded with:', { code, state, error, errorDescription });
+
         if (error) {
             // Show error
             document.getElementById('loading').style.display = 'none';
@@ -191,13 +193,15 @@
 
             // Try to communicate with Figma plugin immediately
             console.log('Attempting to communicate with Figma plugin...');
+            console.log('window.opener:', window.opener);
+            console.log('window.parent:', window.parent);
 
-            // Try to send message to opener (the Figma plugin)
+            // Try multiple communication methods
             let communicationSuccess = false;
 
+            // Method 1: Try window.opener (for popup windows)
             try {
                 if (window.opener) {
-                    // If opened in a popup, send to opener
                     console.log('Attempting to send message to opener...');
                     window.opener.postMessage({
                         pluginMessage: {
@@ -207,9 +211,49 @@
                     }, '*');
                     communicationSuccess = true;
                     console.log('Message sent to opener successfully');
+                } else {
+                    console.log('No window.opener found');
                 }
             } catch (e) {
                 console.log('Failed to send message to opener:', e);
+            }
+
+            // Method 2: Try window.parent (for iframe scenarios)
+            if (!communicationSuccess) {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        console.log('Attempting to send message to parent...');
+                        window.parent.postMessage({
+                            pluginMessage: {
+                                type: 'oauth-callback',
+                                authCode: code
+                            }
+                        }, '*');
+                        communicationSuccess = true;
+                        console.log('Message sent to parent successfully');
+                    } else {
+                        console.log('No valid window.parent found');
+                    }
+                } catch (e) {
+                    console.log('Failed to send message to parent:', e);
+                }
+            }
+
+            // Method 3: Try to find the Figma plugin window
+            if (!communicationSuccess) {
+                try {
+                    console.log('Attempting to send message to all windows...');
+                    window.postMessage({
+                        pluginMessage: {
+                            type: 'oauth-callback',
+                            authCode: code
+                        }
+                    }, '*');
+                    communicationSuccess = true;
+                    console.log('Message broadcasted to all windows');
+                } catch (e) {
+                    console.log('Failed to broadcast message:', e);
+                }
             }
 
             if (communicationSuccess) {
