@@ -190,53 +190,68 @@
             document.getElementById('success').style.display = 'block';
 
             // Try to communicate with Figma plugin immediately
+            console.log('Attempting to communicate with Figma plugin...');
+
+            // Always set localStorage as the primary fallback
+            localStorage.setItem('figma_oauth_code', code);
+            localStorage.setItem('figma_oauth_timestamp', Date.now().toString());
+            console.log('Stored auth code in localStorage');
+
+            // Try multiple ways to communicate with the plugin
+            let communicationSuccess = false;
+
             try {
-                // Try multiple ways to communicate with the plugin
                 if (window.opener) {
                     // If opened in a popup, send to opener
+                    console.log('Attempting to send message to opener...');
                     window.opener.postMessage({
                         pluginMessage: {
                             type: 'oauth-callback',
                             authCode: code
                         }
                     }, '*');
-                } else if (window.parent && window.parent !== window) {
+                    communicationSuccess = true;
+                    console.log('Message sent to opener successfully');
+                }
+            } catch (e) {
+                console.log('Failed to send message to opener:', e);
+            }
+
+            try {
+                if (window.parent && window.parent !== window) {
                     // If in an iframe, send to parent
+                    console.log('Attempting to send message to parent...');
                     window.parent.postMessage({
                         pluginMessage: {
                             type: 'oauth-callback',
                             authCode: code
                         }
                     }, '*');
+                    communicationSuccess = true;
+                    console.log('Message sent to parent successfully');
                 }
-
-                // Also try to send via localStorage as a fallback
-                localStorage.setItem('figma_oauth_code', code);
-                localStorage.setItem('figma_oauth_timestamp', Date.now().toString());
-
-                // Auto-close after 1 second
-                setTimeout(() => {
-                    window.close();
-                }, 1000);
-
             } catch (e) {
-                console.log('Could not communicate with Figma plugin automatically');
-                // Fallback: show manual instructions
+                console.log('Failed to send message to parent:', e);
+            }
+
+            if (communicationSuccess) {
+                console.log('Communication successful, closing window in 2 seconds...');
+                // Auto-close after 2 seconds to give time for the message to be processed
+                setTimeout(() => {
+                    try {
+                        window.close();
+                    } catch (e) {
+                        console.log('Could not close window automatically');
+                    }
+                }, 2000);
+            } else {
+                console.log('No direct communication possible, relying on localStorage fallback');
+                // Show message that user should return to Figma
                 document.getElementById('success').innerHTML = `
                     <h2 class="success">✅ Authentication Successful!</h2>
                     <p>You have been successfully authenticated with GitHub.</p>
-                    <div class="instructions">
-                        <h4>Next Steps:</h4>
-                        <ol>
-                            <li>Copy the authorization code below</li>
-                            <li>Return to Figma</li>
-                            <li>Paste the code in the plugin's authorization field</li>
-                            <li>Click "Complete Authentication"</li>
-                        </ol>
-                    </div>
-                    <div class="code-display">${code}</div>
-                    <button class="btn" onclick="copyCode()">Copy Code</button>
-                    <button class="btn" onclick="closeWindow()" style="margin-left: 8px; background: #6c757d;">Close Window</button>
+                    <p><strong>Please return to Figma and click the "🔍 Check for Auth Code" button to complete the authentication.</strong></p>
+                    <p>You can now close this window.</p>
                 `;
             }
         } else {
