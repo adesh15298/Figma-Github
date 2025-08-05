@@ -192,12 +192,7 @@
             // Try to communicate with Figma plugin immediately
             console.log('Attempting to communicate with Figma plugin...');
 
-            // Always set localStorage as the primary fallback
-            localStorage.setItem('figma_oauth_code', code);
-            localStorage.setItem('figma_oauth_timestamp', Date.now().toString());
-            console.log('Stored auth code in localStorage');
-
-            // Try multiple ways to communicate with the plugin
+            // Try to send message to opener (the Figma plugin)
             let communicationSuccess = false;
 
             try {
@@ -217,23 +212,6 @@
                 console.log('Failed to send message to opener:', e);
             }
 
-            try {
-                if (window.parent && window.parent !== window) {
-                    // If in an iframe, send to parent
-                    console.log('Attempting to send message to parent...');
-                    window.parent.postMessage({
-                        pluginMessage: {
-                            type: 'oauth-callback',
-                            authCode: code
-                        }
-                    }, '*');
-                    communicationSuccess = true;
-                    console.log('Message sent to parent successfully');
-                }
-            } catch (e) {
-                console.log('Failed to send message to parent:', e);
-            }
-
             if (communicationSuccess) {
                 console.log('Communication successful, closing window in 2 seconds...');
                 // Auto-close after 2 seconds to give time for the message to be processed
@@ -245,12 +223,12 @@
                     }
                 }, 2000);
             } else {
-                console.log('No direct communication possible, relying on localStorage fallback');
+                console.log('No direct communication possible');
                 // Show message that user should return to Figma
                 document.getElementById('success').innerHTML = `
                     <h2 class="success">✅ Authentication Successful!</h2>
                     <p>You have been successfully authenticated with GitHub.</p>
-                    <p><strong>Please return to Figma and click the "🔍 Check for Auth Code" button to complete the authentication.</strong></p>
+                    <p><strong>Please return to Figma to complete the authentication.</strong></p>
                     <p>You can now close this window.</p>
                 `;
             }
