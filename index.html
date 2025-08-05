@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>GitHub OAuth Callback</title>
     <style>
@@ -11,24 +12,24 @@
             color: #333;
             text-align: center;
         }
-        
+
         .container {
             max-width: 500px;
             margin: 0 auto;
             background: white;
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             padding: 40px;
         }
-        
+
         .success {
             color: #28a745;
         }
-        
+
         .error {
             color: #dc3545;
         }
-        
+
         .spinner {
             border: 4px solid #f3f3f3;
             border-top: 4px solid #667eea;
@@ -38,12 +39,17 @@
             animation: spin 1s linear infinite;
             margin: 20px auto;
         }
-        
+
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
-        
+
         .btn {
             background: #667eea;
             color: white;
@@ -57,12 +63,47 @@
             display: inline-block;
             margin-top: 20px;
         }
-        
+
         .btn:hover {
             background: #5a6fd8;
         }
+
+        .code-display {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .instructions {
+            background: #e8f5e8;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 16px;
+            margin: 16px 0;
+            text-align: left;
+        }
+
+        .instructions h4 {
+            margin: 0 0 8px 0;
+            color: #155724;
+        }
+
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 4px;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div id="loading">
@@ -70,14 +111,13 @@
             <div class="spinner"></div>
             <p>Please wait while we complete the authentication process.</p>
         </div>
-        
+
         <div id="success" style="display: none;">
             <h2 class="success">✅ Authentication Successful!</h2>
             <p>You have been successfully authenticated with GitHub.</p>
-            <p>You can now close this window and return to Figma.</p>
-            <button class="btn" onclick="closeWindow()">Close Window</button>
+            <p>Redirecting back to Figma...</p>
         </div>
-        
+
         <div id="error" style="display: none;">
             <h2 class="error">❌ Authentication Failed</h2>
             <p id="error-message">An error occurred during authentication.</p>
@@ -96,9 +136,27 @@
         // Check if this is a Figma plugin environment
         const isFigmaPlugin = window.parent && window.parent !== window;
 
+        function copyCode() {
+            const codeElement = document.getElementById('auth-code-display');
+            const textArea = document.createElement('textarea');
+            textArea.value = code;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+
+            // Show feedback
+            const copyBtn = document.querySelector('button[onclick="copyCode()"]');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+            }, 2000);
+        }
+
         function closeWindow() {
+            // Try to communicate with Figma plugin if possible
             if (isFigmaPlugin) {
-                // In Figma plugin environment, try to communicate with parent
                 try {
                     window.parent.postMessage({
                         pluginMessage: {
@@ -112,7 +170,7 @@
                     console.log('Could not communicate with Figma plugin');
                 }
             }
-            
+
             // Close the window
             window.close();
         }
@@ -123,39 +181,74 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('error').style.display = 'block';
             document.getElementById('error-message').textContent = errorDescription || error;
-            
-            // Auto-close after 3 seconds
-            setTimeout(closeWindow, 3000);
+
+            // Auto-close after 5 seconds
+            setTimeout(closeWindow, 5000);
         } else if (code) {
-            // Show success
+            // Show success and automatically send code back
             document.getElementById('loading').style.display = 'none';
             document.getElementById('success').style.display = 'block';
-            
+
             // Try to communicate with Figma plugin immediately
-            if (isFigmaPlugin) {
-                try {
+            try {
+                // Try multiple ways to communicate with the plugin
+                if (window.opener) {
+                    // If opened in a popup, send to opener
+                    window.opener.postMessage({
+                        pluginMessage: {
+                            type: 'oauth-callback',
+                            authCode: code
+                        }
+                    }, '*');
+                } else if (window.parent && window.parent !== window) {
+                    // If in an iframe, send to parent
                     window.parent.postMessage({
                         pluginMessage: {
                             type: 'oauth-callback',
                             authCode: code
                         }
                     }, '*');
-                } catch (e) {
-                    console.log('Could not communicate with Figma plugin');
                 }
+
+                // Also try to send via localStorage as a fallback
+                localStorage.setItem('figma_oauth_code', code);
+                localStorage.setItem('figma_oauth_timestamp', Date.now().toString());
+
+                // Auto-close after 1 second
+                setTimeout(() => {
+                    window.close();
+                }, 1000);
+
+            } catch (e) {
+                console.log('Could not communicate with Figma plugin automatically');
+                // Fallback: show manual instructions
+                document.getElementById('success').innerHTML = `
+                    <h2 class="success">✅ Authentication Successful!</h2>
+                    <p>You have been successfully authenticated with GitHub.</p>
+                    <div class="instructions">
+                        <h4>Next Steps:</h4>
+                        <ol>
+                            <li>Copy the authorization code below</li>
+                            <li>Return to Figma</li>
+                            <li>Paste the code in the plugin's authorization field</li>
+                            <li>Click "Complete Authentication"</li>
+                        </ol>
+                    </div>
+                    <div class="code-display">${code}</div>
+                    <button class="btn" onclick="copyCode()">Copy Code</button>
+                    <button class="btn" onclick="closeWindow()" style="margin-left: 8px; background: #6c757d;">Close Window</button>
+                `;
             }
-            
-            // Auto-close after 2 seconds
-            setTimeout(closeWindow, 2000);
         } else {
             // No code or error - show generic error
             document.getElementById('loading').style.display = 'none';
             document.getElementById('error').style.display = 'block';
             document.getElementById('error-message').textContent = 'No authorization code received from GitHub.';
-            
-            // Auto-close after 3 seconds
-            setTimeout(closeWindow, 3000);
+
+            // Auto-close after 5 seconds
+            setTimeout(closeWindow, 5000);
         }
     </script>
 </body>
-</html> 
+
+</html>
